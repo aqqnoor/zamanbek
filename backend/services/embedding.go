@@ -25,15 +25,18 @@ func NewEmbedding(baseURL, apiKey string) *EmbeddingClient {
 
 type embeddingRequest struct {
 	Model string      `json:"model"`
-	Input interface{} `json:"input"`
+	Input interface{} `json:"input"` // строка или []string
 }
 
+type embeddingItem struct {
+	Embedding []float32 `json:"embedding"`
+	Index     int       `json:"index"`
+}
 type embeddingResponse struct {
-	Data []struct {
-		Embedding []float32 `json:"embedding"`
-	} `json:"data"`
+	Data []embeddingItem `json:"data"`
 }
 
+// SINGLE: оставить для совместимости
 func (e *EmbeddingClient) Embed(input interface{}) ([]float32, error) {
 	url := e.baseURL + "/v1/embeddings"
 	payload, _ := json.Marshal(embeddingRequest{
@@ -41,16 +44,12 @@ func (e *EmbeddingClient) Embed(input interface{}) ([]float32, error) {
 		Input: input,
 	})
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	req.Header.Set("Authorization", "Bearer "+e.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := e.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
@@ -58,11 +57,38 @@ func (e *EmbeddingClient) Embed(input interface{}) ([]float32, error) {
 	}
 
 	var er embeddingResponse
-	if err := json.NewDecoder(res.Body).Decode(&er); err != nil {
-		return nil, err
-	}
-	if len(er.Data) == 0 {
-		return nil, fmt.Errorf("empty embedding data")
-	}
+	if err := json.NewDecoder(res.Body).Decode(&er); err != nil { return nil, err }
+	if len(er.Data) == 0 { return nil, fmt.Errorf("empty embedding data") }
 	return er.Data[0].Embedding, nil
+}
+
+// BATCH: для обучения индекса
+func (e *EmbeddingClient) EmbedMany(texts []string) ([][]float32, error) {
+	url := e.baseURL + "/v1/embeddings"
+	payload, _ := json.Marshal(embeddingRequest{
+		Model: "text-embedding-3-small",
+		Input: texts, // батч
+	})
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil { return nil, err }
+	req.Header.Set("Authorization", "Bearer "+e.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := e.client.Do(req)
+	if err != nil { return nil, err }
+	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("embeddings status %d", res.StatusCode)
+	}
+
+	var er embeddingResponse
+	if err := json.NewDecoder(res.Body).Decode(&er); err != nil { return nil, err }
+	if len(er.Data) == 0 { return nil, fmt.Errorf("empty embedding data") }
+
+	vecs := make([][]float32, len(er.Data))
+	for i, it := range er.Data {
+		vecs[i] = it.Embedding
+	}
+	return vecs, nil
 }

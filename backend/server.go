@@ -7,6 +7,7 @@ import (
 	"os"
 	"unicode/utf8"
 
+	"zmb-assistant/handlers"
 	"zmb-assistant/services"
 
 	"golang.org/x/text/encoding/charmap"
@@ -40,6 +41,7 @@ func startServer() {
 		_ = json.NewEncoder(w).Encode(map[string]any{"reply": reply})
 	})
 
+	// --- Session API ---
 	mux.HandleFunc("/session/new", func(w http.ResponseWriter, r *http.Request) {
 		jsonUTF8(w)
 		id := sessions.EnsureSessionID(w, r)
@@ -63,6 +65,7 @@ func startServer() {
 		})
 	})
 
+	// --- Chat (без RAG) ---
 	mux.HandleFunc("/llm/chat", func(w http.ResponseWriter, r *http.Request) {
 		jsonUTF8(w)
 		if r.Method != http.MethodPost {
@@ -122,7 +125,15 @@ func startServer() {
 		})
 	})
 
-	// Раздаём статические файлы из frontend/
+	// --- NEW: обучение индекса (RAG) ---
+	// POST /admin/train  -> строит/обновляет data/index.json
+	mux.HandleFunc("/admin/train", handlers.TrainHandler)
+
+	// --- NEW: RAG-чат с учётом индекса и бустов ---
+	// POST /rag/chat  body: { "query": "...", "k": 5 }
+	mux.HandleFunc("/rag/chat", handlers.RagChatHandler)
+
+	// Раздаём статические файлы из корня репо (chat.html и т.д.)
 	mux.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("../"))))
 
 	log.Println("listening on :8080")
