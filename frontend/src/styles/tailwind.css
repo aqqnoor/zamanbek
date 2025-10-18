@@ -1,0 +1,10 @@
+/* src/styles/tailwind.css */
+@import "tailwindcss";
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body, #root {
+  overflow-y: auto !important;
+}
