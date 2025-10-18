@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zamanbek Chat Assistant</title>
+  <style>
+    body{font-family:sans-serif;margin:1em;background:#f9f9f9}
+    #status{margin:0 0 8px;color:#555}
+    #messages{border:1px solid #ccc;padding:10px;height:300px;overflow-y:auto;background:#fff}
+    .message{margin:5px 0}
+    .user{font-weight:bold;color:#333}
+    .assistant{color:#006400}
+    input[type="text"]{width:80%;padding:8px}
+    button{padding:8px 12px}
+  </style>
+</head>
+<body>
+  <h1>Zamanbek Chat Assistant</h1>
+  <div id="status">Connecting…</div>
+  <div id="messages"></div>
+  <div>
+    <input id="input" type="text" placeholder="Type your message…">
+    <button id="send">Send</button>
+  </div>
+  <script>
+    const statusEl = document.getElementById('status');
+
+    function apiBase(){
+      return (window.location.origin && window.location.origin.startsWith('http'))
+        ? window.location.origin
+        : 'http://localhost:8080';
+    }
+
+    async function initSession(){
+      try{
+        const res = await fetch(apiBase() + '/session/new');
+        if(res.ok){ statusEl.textContent = 'Online: backend connected'; }
+        else { statusEl.textContent = 'Backend error ('+res.status+'). Using local fallback'; }
+      }catch(e){ statusEl.textContent = 'Offline: using local fallback'; }
+    }
+
+    function appendMessage(role, text){
+      const messagesDiv = document.getElementById('messages');
+      const div = document.createElement('div');
+      div.className = 'message ' + role.toLowerCase();
+      div.textContent = role + ': ' + text;
+      messagesDiv.appendChild(div);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function detectLang(s){
+      const kz = /[ӘәҒғҚқҢңӨөҰұҮүҺһІі]/;
+      const cyr = /[А-Яа-яЁё]/;
+      if(kz.test(s)) return 'kz';
+      if(cyr.test(s)) return 'ru';
+      return 'en';
+    }
+
+    function localReply(text){
+      const lang = detectLang(text);
+      if(!text.trim()){
+        return lang==='kz' ? 'Сіз сұрақ енгізбедіңіз. Қалай көмектесе аламын?'
+            : lang==='ru' ? 'Вы не ввели вопрос. Как я могу помочь?'
+            : 'You didn\'t type a question. How can I help?';
+      }
+      return lang==='kz' ? 'Құрметті клиент, сұрағыңызды қабылдадық: ' + text
+          : lang==='ru' ? 'Уважаемый клиент, ваш вопрос принят: ' + text
+          : 'Dear customer, we received your question: ' + text;
+    }
+
+    async function send(){
+      const input = document.getElementById('input');
+      const text = input.value.trim();
+      if(!text) return;
+      appendMessage('User', text);
+      input.value = '';
+      try{
+        const response = await fetch(apiBase() + '/llm/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        if(response.ok){ const data = await response.json(); appendMessage('Assistant', data.reply); }
+        else { appendMessage('Assistant', localReply(text)); }
+      }catch(err){ appendMessage('Assistant', localReply(text)); }
+    }
+
+    document.getElementById('send').addEventListener('click', send);
+    window.addEventListener('load', initSession);
+  </script>
+</body>
+</html>

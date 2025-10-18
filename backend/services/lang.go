@@ -1,18 +1,31 @@
-// services/lang.go
 package services
 
-import "strings"
+import (
+	"unicode"
+)
 
-func IsKazakh(s string) bool {
-    s = strings.ToLower(s)
-    kzLetters := []string{"ә","ө","ү","ұ","қ","ғ","ң","і","һ"}
-    for _, ch := range kzLetters {
-        if strings.Contains(s, ch) { return true }
-    }
-    // эвристика по словам
-    kzWords := []string{"ма","ме","ба","бе","па","пе","қалай","қандай","мүмкін","түсіндір"}
-    for _, w := range kzWords {
-        if strings.Contains(s, " "+w) { return true }
-    }
-    return false
+// DetectLang определяет язык сообщения.
+// 1) Если есть хотя бы один казахский символ — "kz"
+// 2) Иначе если есть любой кириллический символ — "ru"
+// 3) Иначе — "en"
+func DetectLang(s string) string {
+	// Казахский набор (доп. к кириллице)
+	kazakhRunes := map[rune]bool{
+		'Ә': true, 'ә': true, 'Ғ': true, 'ғ': true, 'Қ': true, 'қ': true,
+		'Ң': true, 'ң': true, 'Ө': true, 'ө': true, 'Ұ': true, 'ұ': true,
+		'Ү': true, 'ү': true, 'Һ': true, 'һ': true, 'І': true, 'і': true,
+	}
+	hasCyr := false
+	for _, r := range s {
+		if kazakhRunes[r] {
+			return "kz"
+		}
+		if unicode.In(r, unicode.Cyrillic) {
+			hasCyr = true
+		}
+	}
+	if hasCyr {
+		return "ru"
+	}
+	return "en"
 }

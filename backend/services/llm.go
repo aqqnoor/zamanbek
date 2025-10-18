@@ -1,80 +1,42 @@
 package services
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
+    "fmt"
+    "strings"
 )
 
-type LLM struct {
-	baseURL string
-	apiKey  string
-	client  *http.Client
+// LLMClient — общее интерфейсное API обоих клиентов.
+type LLMClient interface {
+    Chat(model string, messages []ChatMessage, temperature float32) (string, error)
 }
 
-func NewLLM(baseURL, apiKey string) *LLM {
-	return &LLM{
-		baseURL: baseURL,
-		apiKey:  apiKey,
-		client:  &http.Client{Timeout: 60 * time.Second},
-	}
-}
+// MockLLM — локальная заглушка для офлайн-режима.
+type MockLLM struct{}
 
-type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
+func NewLLMMock() *MockLLM { return &MockLLM{} }
 
-type chatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	Temperature float32       `json:"temperature,omitempty"`
-}
-
-type chatResponse struct {
-	Choices []struct {
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-}
-
-func (l *LLM) Chat(model string, messages []ChatMessage, temperature float32) (string, error) {
-	url := l.baseURL + "/v1/chat/completions"
-	body, _ := json.Marshal(chatRequest{
-		Model:       model,
-		Messages:    messages,
-		Temperature: temperature,
-	})
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+l.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	res, err := l.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		b, _ := io.ReadAll(res.Body)
-		return "", fmt.Errorf("bad status %d: %s", res.StatusCode, string(b))
-	}
-
-	var cr chatResponse
-	if err := json.NewDecoder(res.Body).Decode(&cr); err != nil {
-		return "", err
-	}
-	if len(cr.Choices) == 0 {
-		return "", fmt.Errorf("empty choices")
-	}
-	return cr.Choices[0].Message.Content, nil
+func (l *MockLLM) Chat(model string, messages []ChatMessage, temperature float32) (string, error) {
+    if len(messages) == 0 {
+        return "", fmt.Errorf("no messages provided")
+    }
+    userMsg := strings.TrimSpace(messages[len(messages)-1].Content)
+    lang := DetectLang(userMsg)
+    if userMsg == "" {
+        switch lang {
+        case "kz":
+            return "Сіз сұрақ енгізбедіңіз. Қалай көмектесе аламын?", nil
+        case "ru":
+            return "Вы не ввели вопрос. Как я могу помочь?", nil
+        default:
+            return "You didn't type a question. How can I help?", nil
+        }
+    }
+    switch lang {
+    case "kz":
+        return fmt.Sprintf("Құрметті клиент, сұрағыңызды қабылдадық: %s", userMsg), nil
+    case "ru":
+        return fmt.Sprintf("Уважаемый клиент, ваш вопрос принят: %s", userMsg), nil
+    default:
+        return fmt.Sprintf("Dear customer, we received your question: %s", userMsg), nil
+    }
 }
