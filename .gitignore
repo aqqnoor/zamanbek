@@ -1,0 +1,6 @@
+# Go
+bin/
+dist/
+*.exe
+# Local env
+.env

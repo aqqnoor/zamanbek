@@ -122,6 +122,9 @@ func startServer() {
 		})
 	})
 
+	// Раздаём статические файлы из frontend/
+	mux.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("../"))))
+
 	log.Println("listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
